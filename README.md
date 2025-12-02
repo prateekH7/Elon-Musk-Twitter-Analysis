@@ -1,4 +1,4 @@
-Decoding Digital Influence: Analyzing Elon Musk’s Twitter Communication
+## Decoding Digital Influence: Analyzing Elon Musk’s Twitter Communication
 
 Sentiment Analysis • NLP • Social Media Engagement • R
 
@@ -16,7 +16,7 @@ This project analyzes Elon Musk’s tweets to understand how sentiment, emojis, 
 ✔ Virality comparison: Influencers vs Regular Users
 ✔ Word cloud, top-word frequencies, sentiment density plots
 
-📊 Core Findings
+## 📊 Core Findings
 
 Positive tone, anticipation, and trust drive the highest engagement
 
@@ -32,7 +32,7 @@ Multimedia content increases likes and retweets across all categories
 
 Visualizations referenced from the paper include bar plots (pg. 17–45) and word clouds.
 
-🧠 Technologies Used
+##  Technologies Used
 
 R
 
@@ -50,7 +50,7 @@ NLP techniques
 
 Visualization libraries
 
-📂 Project Structure
+## 📂 Project Structure
 Elon-Musk-Twitter-Analysis/
 │── data/
 │── code/
@@ -60,7 +60,7 @@ Elon-Musk-Twitter-Analysis/
 │── README.md
 │── sentiment_analysis.R
 
-🚀 How to Run
+## How to Run
 
 Install packages:
 
@@ -77,7 +77,7 @@ See:
 Harlikar_Final_Research_Papers.pdf
 (Uploaded in report/)
 
-👤 Author
+## 👤 Author
 
 Pratik Harlikar
 Master of Data Analytics — NMSU
