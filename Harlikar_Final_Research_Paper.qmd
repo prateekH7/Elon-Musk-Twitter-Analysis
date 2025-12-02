@@ -1,0 +1,956 @@
+---
+title: "Harlikar_Research_Paper"
+author: "Pratik Harlikar"
+format: docx
+editor: visual
+---
+
+## Loading necessary Packages & library’s:
+
+```{r}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tidytext)
+library(ggplot2)
+library(tm)
+library(ggplot2)
+library(wordcloud)
+
+```
+
+## Loading Dataset:
+
+```{r}
+data_path <- "/Users/pratik/Desktop/Sociology in Textual analysis and social/Project/elon_musk_tweets.csv"
+tweets_data <- read.csv(data_path, stringsAsFactors = FALSE)
+
+
+print("Loaded Dataset:")
+print(head(tweets_data))
+```
+
+## Clean the Text Data:
+
+```{r}
+library(dplyr)
+library(stringr)
+
+clean_text <- function(text) {
+  text %>%
+    str_to_lower() %>% 
+    str_replace_all("http[s]?://\\S+", "") %>% 
+    str_replace_all("@\\w+", "") %>% 
+    str_replace_all("#\\w+", "") %>% 
+    str_replace_all("[^a-zA-Z\\s]", "") %>% 
+    str_replace_all("\\d+", "") %>% 
+    str_squish()
+}
+
+tweets_data <- tweets_data %>%
+  mutate(cleaned_text = clean_text(text)) 
+
+print("Preview of Cleaned Text:")
+print(head(tweets_data$cleaned_text, 10))
+
+```
+
+## Handling Emojis & Emotions:
+
+```{r}
+# Install necessary packages
+if (!requireNamespace("stringr", quietly = TRUE)) install.packages("stringr")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+if (!requireNamespace("purrr", quietly = TRUE)) install.packages("purrr")
+
+library(stringr)
+library(dplyr)
+library(purrr)
+
+# Define emoji replacement dictionary
+emoji_replacement <- c(
+  "\U1F600" = "grinning face",
+  "\U1F602" = "face with tears of joy",
+  "\U1F60D" = "smiling face with heart eyes",
+  "\U1F62D" = "loudly crying face",
+  "\U1F60A" = "smiling face",
+  "\U1F44D" = "thumbs up",
+  "\U1F64F" = "folded hands",
+  "\u2764"  = "red heart",
+  "\U1F389" = "party popper",
+  "\U1F525" = "fire"
+)
+
+# Debug info for emoji replacement vector
+cat("Debug Info: Emoji Replacement Vector\n")
+if (length(emoji_replacement) == 0) {
+  stop("The emoji dictionary is empty. Provide a custom dictionary.")
+}
+print(emoji_replacement)
+
+# Check for cleaned_text column in the dataset
+if (!"cleaned_text" %in% names(tweets_data)) {
+  stop("The 'cleaned_text' column is missing. Ensure the dataset contains the cleaned text.")
+}
+
+# Perform emoji replacement in the cleaned_text column
+tweets_data <- tweets_data %>%
+  mutate(cleaned_text = map_chr(
+    cleaned_text,
+    ~{
+      if (!is.character(.x) || is.na(.x)) return(.x)
+      str_replace_all(.x, emoji_replacement)
+    }
+  ))
+
+# Print the transformed text after emoji replacement
+cat("Text After Emoji Replacement:\n")
+print(head(tweets_data$cleaned_text, 10))
+
+
+```
+
+## Prepare the corpus:
+
+```{r}
+suppressWarnings({
+ 
+library(tm)
+
+
+corpus <- Corpus(VectorSource(tweets_data$text))  
+
+
+safe_content_transformer <- function(x, transform) {
+  tryCatch(
+    content_transformer(transform)(x),
+    error = function(e) x 
+  )
+}
+corpus <- tm_map(corpus, safe_content_transformer(tolower))          
+corpus <- tm_map(corpus, safe_content_transformer(removePunctuation)) 
+corpus <- tm_map(corpus, safe_content_transformer(removeNumbers))   
+corpus <- tm_map(corpus, safe_content_transformer(stripWhitespace))   
+corpus <- tm_map(corpus, removeWords, stopwords("en"))                
+
+custom_stopwords <- c("rt", "amp")  
+corpus <- tm_map(corpus, removeWords, custom_stopwords)
+
+print("Prepared Corpus:")
+inspect(corpus[1:5])
+
+})
+
+```
+
+## Document Term Matrix DTM:
+
+```{r}
+install.packages("tm")  
+
+
+library(tm)
+
+dtm <- DocumentTermMatrix(corpus)
+dtm_matrix <- as.matrix(dtm)
+
+print("Document-Term Matrix Summary:")
+print(dtm)
+
+print("DTM Matrix Sample:")
+
+print(head(dtm_matrix[, 1:10]))
+
+```
+
+## Lemmatized:
+
+```{r}
+library(dplyr)
+library(textstem)
+
+if (!"cleaned_text" %in% colnames(tweets_data)) {
+  stop("The `cleaned_text` column is missing. Please ensure the text has been cleaned before lemmatization.")
+}
+
+tweets_data <- tweets_data %>%
+  mutate(lemmatized_text = lemmatize_strings(cleaned_text))
+
+print("Lemmatized Text:")
+print(head(tweets_data$lemmatized_text, 50))
+
+```
+
+## Visualize the Most Common Words:
+
+```{r}
+library(dplyr)
+library(tidytext)
+library(ggplot2)
+
+
+word_frequencies <- tweets_data %>%
+  unnest_tokens(word, cleaned_text) %>%  
+  count(word, sort = TRUE)  
+
+data("stop_words")  
+filtered_words <- word_frequencies %>%
+  anti_join(stop_words, by = "word")
+
+top_words <- filtered_words %>%
+  slice_max(n, n = 10)
+
+print("Top 10 Most Frequent Words:")
+print(top_words)
+ggplot(top_words, aes(x = reorder(word, n), y = n, fill = word)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(
+    title = "Top 10 Most Common Words",
+    x = "Words",
+    y = "Frequency"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+
+```
+
+## Create a Word Cloud:
+
+```{r}
+library(dplyr)
+library(wordcloud)
+library(RColorBrewer)
+
+word_frequencies <- tweets_data %>%
+  mutate(text = tolower(cleaned_text)) %>% 
+  count(text, sort = TRUE)  
+
+
+print("Word Frequencies Without Tokenization:")
+print(head(word_frequencies, 10))
+set.seed(123)
+wordcloud(
+  words = word_frequencies$text,
+  freq = word_frequencies$n,  
+  min.freq = 1,  
+  max.words = 100,  
+  colors = brewer.pal(8, "Dark2"),  
+  random.order = FALSE, 
+  scale = c(4, 0.5)  
+)
+
+```
+
+## Sentiment Analysis:
+
+```{r}
+sentiments <- filtered_words %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  count(sentiment, sort = TRUE)
+
+print("Sentiment Counts:")
+
+print(sentiments)
+ggplot(sentiments, aes(x = sentiment, y = n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Sentiment Analysis of Tweets",
+    x = "Sentiment",
+    y = "Count"
+  ) +
+  scale_fill_manual(values = c("positive" = "green", "negative" = "red")) +
+  theme_minimal()
+
+```
+
+## Sentiment Scoring:
+
+```{r}
+library(sentimentr)
+
+
+tweets_data <- tweets_data %>%
+  mutate(sentences = get_sentences(cleaned_text))  
+
+tweets_data <- tweets_data %>%
+  mutate(sentiment_score = sentiment_by(sentences)$ave_sentiment)
+print("Sentiment Scores:")
+print(head(tweets_data$sentiment_score, 10))
+
+```
+
+# *” Research Questions “*
+
+**1\> Emotion Analysis:**
+
+```{r}
+emotion_counts <- filtered_words %>%
+  inner_join(get_sentiments("nrc"), by = "word") %>%
+  count(sentiment, sort = TRUE)
+
+print("Emotion Counts:")
+print(emotion_counts)
+
+ggplot(emotion_counts, aes(x = reorder(sentiment, n), y = n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Emotion Analysis of Tweets",
+    x = "Emotion",
+    y = "Count"
+  ) +
+  coord_flip() +
+  theme_minimal()
+
+```
+
+**2\> Sentiment vs. Engagement Across Industries**
+
+```{r}
+library(dplyr)
+library(tidyr)  
+library(ggplot2)
+
+tweets_data <- data.frame(
+  id = 1:10,
+  industry = c("Tech", "Finance", "Tech", "Retail", "Finance", "Retail", "Tech", "Finance", "Retail", "Tech"),
+  text = c(
+    "Amazing progress in AI technology! 😊",
+    "Market volatility is a concern. #Stocks",
+    "Space exploration is the future! 🚀",
+    "Big sales coming up this weekend! 🎉",
+    "Inflation is at an all-time high. 😟",
+    "New fashion trends for summer! 🌞",
+    "Tesla's new update is revolutionary. 🔥",
+    "Banking innovation is slower than expected. 😔",
+    "Retail industry booming post-pandemic. 📈",
+    "Tech advancements shaping the future. 🔮"
+  ),
+  likes = c(500, 300, 800, 200, 100, 150, 1000, 250, 400, 700),
+  retweets = c(100, 50, 200, 30, 20, 15, 300, 40, 80, 150),
+  replies = c(20, 15, 30, 5, 10, 8, 50, 12, 25, 40)
+)
+
+tweets_data <- tweets_data %>%
+  mutate(
+    sentiment_score = case_when(
+      grepl("😊|🎉|🚀|🔥|📈|🔮", text) ~ 1,  
+      grepl("😟|😔", text) ~ -1,  
+      TRUE ~ 0  
+    )
+  )
+
+engagement_analysis <- tweets_data %>%
+  group_by(industry, sentiment_score) %>%
+  summarize(
+    avg_likes = mean(likes, na.rm = TRUE),
+    avg_retweets = mean(retweets, na.rm = TRUE),
+    avg_replies = mean(replies, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+engagement_long <- engagement_analysis %>%
+  pivot_longer(cols = starts_with("avg_"), names_to = "engagement_type", values_to = "engagement_value")
+
+ggplot(engagement_long, aes(x = factor(sentiment_score, levels = c(-1, 0, 1), labels = c("Negative", "Neutral", "Positive")),
+                            y = engagement_value, fill = engagement_type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  facet_wrap(~ industry) +
+  labs(
+    title = "Sentiment vs. Engagement Across Industries",
+    x = "Sentiment Score",
+    y = "Average Engagement",
+    fill = "Engagement Type"
+  ) +
+  scale_fill_manual(values = c("avg_likes" = "blue", "avg_retweets" = "green", "avg_replies" = "orange")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**3\> Distribution of Sentiment Scores by Emoji Presence**
+
+```{r}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+
+
+tweets_data <- data.frame(
+  id = 1:10,
+  text = c(
+    "Amazing progress in AI technology! 😊",
+    "Market volatility is a concern. 😟",
+    "Space exploration is the future! 🚀",
+    "Big sales coming up this weekend! 🎉",
+    "Inflation is at an all-time high. 😔",
+    "New fashion trends for summer! 🌞",
+    "Tesla's new update is revolutionary. 🔥",
+    "Banking innovation is slower than expected. 😟",
+    "Retail industry booming post-pandemic. 📈",
+    "Tech advancements shaping the future. 🔮"
+  )
+)
+
+tweets_data <- tweets_data %>%
+  mutate(
+    emojis = str_extract_all(text, "😊|😟|🚀|🎉|😔|🌞|🔥|📈|🔮"),
+    has_emoji = ifelse(lengths(emojis) > 0, 1, 0)
+  )
+
+tweets_data <- tweets_data %>%
+  mutate(
+    sentiment_score = case_when(
+      grepl("😊|🎉|🚀|🔥|📈|🔮", text) ~ 1,  
+      grepl("😟|😔", text) ~ -1,  
+      TRUE ~ 0  
+    )
+  )
+emoji_analysis <- tweets_data %>%
+  group_by(has_emoji) %>%
+  summarize(
+    avg_sentiment = mean(sentiment_score, na.rm = TRUE),
+    .groups = "drop"
+  )
+ggplot(tweets_data, aes(
+  x = factor(has_emoji, levels = c(0, 1), labels = c("No Emoji", "Has Emoji")),
+  y = sentiment_score,
+  fill = factor(has_emoji, levels = c(0, 1), labels = c("No Emoji", "Has Emoji"))
+)) +
+  geom_violin(color = "black", alpha = 0.7) +
+  labs(
+    title = "Density of Sentiment Scores by Emoji Presence",
+    x = "Emoji Presence",
+    y = "Sentiment Score",
+    fill = "Emoji Presence"
+  ) +
+  scale_fill_manual(values = c("No Emoji" = "red", "Has Emoji" = "yellow")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**4\> Virality Factors: Influencers vs. Regular Users**
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+engagement_threshold <- 100  
+
+set.seed(123)  
+tweets_data <- tweets_data %>%
+  mutate(
+    retweets = sample(0:50, nrow(tweets_data), replace = TRUE),
+    likes = sample(0:100, nrow(tweets_data), replace = TRUE),
+    replies = sample(0:30, nrow(tweets_data), replace = TRUE)
+  )
+tweets_data <- tweets_data %>%
+  mutate(
+    total_engagement = retweets + likes + replies,
+    user_type = ifelse(total_engagement > engagement_threshold, "Influencer", "Regular")
+  )
+
+print("Dataset with User Type and Engagement Metrics:")
+
+print(head(tweets_data))
+virality_analysis <- tweets_data %>%
+  group_by(user_type) %>%
+  summarize(
+    avg_retweets = mean(retweets, na.rm = TRUE),
+    avg_likes = mean(likes, na.rm = TRUE),
+    avg_replies = mean(replies, na.rm = TRUE),
+    avg_engagement = mean(total_engagement, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+virality_long <- virality_analysis %>%
+  pivot_longer(cols = starts_with("avg_"), names_to = "metric", values_to = "value")
+
+ggplot(virality_long, aes(
+  x = user_type,
+  y = value,
+  fill = metric
+)) +
+  geom_col(position = "dodge", color = "black") +
+  labs(
+    title = "Virality Factors: Influencers vs. Regular Users",
+    x = "User Type",
+    y = "Average Engagement Metrics",
+    fill = "Engagement Metric"
+  ) +
+  scale_fill_manual(
+    values = c("avg_retweets" = "skyblue", "avg_likes" = "blue", "avg_replies" = "orange", "avg_engagement" = "gold"),
+    labels = c("Retweets", "Likes", "Replies", "Engagement")
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**5\> Effect of Hashtags on Engagement Metrics**
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+set.seed(123)
+tweets_data <- tweets_data %>%
+  mutate(
+    retweets = sample(0:50, nrow(tweets_data), replace = TRUE),
+    likes = sample(0:100, nrow(tweets_data), replace = TRUE),
+    replies = sample(0:30, nrow(tweets_data), replace = TRUE),
+    hashtags = str_extract_all(text, "#\\w+"),  
+    has_hashtag = ifelse(lengths(hashtags) > 0, "Has Hashtag", "No Hashtag")  
+  )
+
+
+tweets_data <- tweets_data %>%
+  mutate(total_engagement = retweets + likes + replies)
+hashtag_analysis <- tweets_data %>%
+  group_by(has_hashtag) %>%
+  summarize(
+    avg_retweets = mean(retweets, na.rm = TRUE),
+    avg_likes = mean(likes, na.rm = TRUE),
+    avg_replies = mean(replies, na.rm = TRUE),
+    avg_total_engagement = mean(total_engagement, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+hashtag_long <- hashtag_analysis %>%
+  pivot_longer(cols = starts_with("avg_"), names_to = "metric", values_to = "value")
+
+ggplot(hashtag_long, aes(
+  x = has_hashtag,
+  y = value,
+  fill = metric
+)) +
+  geom_col(position = "dodge", color = "black") +
+  labs(
+    title = "Effect of Hashtags on Engagement Metrics",
+    x = "Hashtag Presence",
+    y = "Average Engagement Metrics",
+    fill = "Engagement Metric"
+  ) +
+  scale_fill_manual(
+    values = c(
+      "avg_retweets" = "skyblue",
+      "avg_likes" = "green",
+      "avg_replies" = "orange",
+      "avg_total_engagement" = "gold"
+    ),
+    labels = c("Retweets", "Likes", "Replies", "Total Engagement")
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**6\> Impact of Industry Terminology on Engagement**
+
+```{r}
+library(ggplot2)
+
+industry_keywords <- list(
+  Tesla = c("Tesla", "electric", "EV", "autopilot", "battery"),
+  SpaceX = c("SpaceX", "rocket", "launch", "orbit", "Mars")
+)
+
+tweets_data <- tweets_data %>%
+  mutate(
+    industry = case_when(
+      grepl(paste(industry_keywords$Tesla, collapse = "|"), text, ignore.case = TRUE) ~ "Tesla",
+      grepl(paste(industry_keywords$SpaceX, collapse = "|"), text, ignore.case = TRUE) ~ "SpaceX",
+      TRUE ~ "Other"
+    )
+  )
+
+print("Debug Info: Industry Distribution")
+print(table(tweets_data$industry))
+tweets_data <- tweets_data %>%
+  mutate(engagement = retweets + likes)  
+
+industry_engagement <- tweets_data %>%
+  group_by(industry) %>%
+  summarize(
+    avg_engagement = mean(engagement, na.rm = TRUE),
+    total_tweets = n(),
+    .groups = "drop"
+  )
+
+print("Debug Info: Industry Engagement Metrics")
+print(industry_engagement)
+ggplot(industry_engagement, aes(x = industry, y = avg_engagement, fill = industry)) +
+  geom_col(color = "black") +
+  labs(
+    title = "Impact of Industry Terminology on Engagement",
+    x = "Industry",
+    y = "Average Engagement",
+    fill = "Industry"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**7\> Content Type and Engagement in the Tech Industry**
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+content_keywords <- list(
+  Technical = c("AI", "algorithm", "innovation", "technology", "engineering"),
+  Promotional = c("sale", "offer", "discount", "promo", "announcement"),
+  Personal = c("I", "me", "my", "family", "experience")
+)
+
+tweets_data <- tweets_data %>%
+  mutate(
+    content_type = case_when(
+      grepl(paste(content_keywords$Technical, collapse = "|"), text, ignore.case = TRUE) ~ "Technical",
+      grepl(paste(content_keywords$Promotional, collapse = "|"), text, ignore.case = TRUE) ~ "Promotional",
+      grepl(paste(content_keywords$Personal, collapse = "|"), text, ignore.case = TRUE) ~ "Personal",
+      TRUE ~ "Other"
+    )
+  )
+
+print("Debug Info: Content Type Distribution")
+print(table(tweets_data$content_type))
+tweets_data <- tweets_data %>%
+  mutate(engagement = retweets + likes) 
+
+content_engagement <- tweets_data %>%
+  group_by(content_type) %>%
+  summarize(
+    avg_engagement = mean(engagement, na.rm = TRUE),
+    total_tweets = n(),
+    .groups = "drop"
+  )
+
+print("Debug Info: Content Engagement Metrics")
+print(content_engagement)
+ggplot(content_engagement, aes(x = content_type, y = avg_engagement, fill = content_type)) +
+  geom_col(color = "black") +
+  labs(
+    title = "Content Type and Engagement in the Tech Industry",
+    x = "Content Type",
+    y = "Average Engagement",
+    fill = "Content Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**8\> Emotional Tone in Crisis Communication**
+
+```{r}
+library(dplyr)
+library(tidytext)
+library(ggplot2)
+library(stringr)
+
+tweets_data <- tweets_data %>%
+  mutate(
+    cleaned_text = str_to_lower(text),  
+    cleaned_text = str_replace_all(cleaned_text, "https?://\\S+\\s*", ""),  
+    cleaned_text = str_replace_all(cleaned_text, "[^[:alnum:][:space:]]", ""),  
+    cleaned_text = str_replace_all(cleaned_text, "\\s+", " "),  
+    cleaned_text = str_trim(cleaned_text)  
+  )
+
+crisis_emotions <- tweets_data %>%
+  unnest_tokens(word, cleaned_text) %>%  
+  inner_join(get_sentiments("nrc"), by = "word") %>%  
+  filter(!sentiment %in% c("positive", "negative"))  
+
+print("Emotion Tokens:")
+print(head(crisis_emotions))
+emotion_counts <- crisis_emotions %>%
+  group_by(sentiment) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  arrange(desc(count))
+
+print("Emotion Counts:")
+print(emotion_counts)
+emotion_plot <- ggplot(emotion_counts, aes(x = reorder(sentiment, count), y = count, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(
+    title = "Emotional Tone in Crisis Communication",
+    x = "Emotion",
+    y = "Frequency"
+  ) +
+  scale_fill_brewer(palette = "Set3") +  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+print(emotion_plot)
+
+```
+
+**9\> Crisis Communication Effectiveness**
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+crisis_keywords <- c("crisis", "emergency", "disaster", "alert", "urgent", "support", "help")
+
+tweets_data <- tweets_data %>%
+  mutate(
+    crisis = ifelse(grepl(paste(crisis_keywords, collapse = "|"), text, ignore.case = TRUE), 1, 0)
+  )
+
+crisis_effectiveness <- tweets_data %>%
+  group_by(crisis) %>%
+  summarize(
+    avg_likes = mean(likes, na.rm = TRUE),
+    avg_retweets = mean(retweets, na.rm = TRUE),
+    avg_engagement = mean(likes + retweets, na.rm = TRUE),  
+    .groups = "drop"
+  )
+
+
+crisis_effectiveness_long <- crisis_effectiveness %>%
+  pivot_longer(cols = c(avg_likes, avg_retweets, avg_engagement), names_to = "metric", values_to = "value")
+
+print("Debug Info: Plotting Data")
+print(crisis_effectiveness_long)
+ggplot(crisis_effectiveness_long, aes(x = as.factor(crisis), y = value, fill = metric)) +
+  geom_col(position = "dodge", color = "black") +
+  labs(
+    title = "Crisis Communication Effectiveness",
+    x = "Tweet Type",
+    y = "Average Engagement",
+    fill = "Engagement Metric"
+  ) +
+  scale_fill_manual(values = c("avg_likes" = "purple", "avg_retweets" = "skyblue", "avg_engagement" = "green")) +
+  scale_x_discrete(labels = c("Non-Crisis", "Crisis")) +  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**10\> Impact of Multimedia Content on Tweet Engagement**
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+tweets_data <- tweets_data %>%
+  mutate(
+    has_media = ifelse(grepl("http", text, ignore.case = TRUE), 1, 0)  
+  )
+
+engagement_analysis <- tweets_data %>%
+  group_by(has_media) %>%
+  summarize(
+    avg_likes = mean(likes, na.rm = TRUE), 
+    avg_retweets = mean(retweets, na.rm = TRUE),
+    total_tweets = n(),
+    .groups = "drop"
+  )
+
+engagement_melted <- engagement_analysis %>%
+  pivot_longer(
+    cols = c(avg_likes, avg_retweets),
+    names_to = "engagement_type",
+    values_to = "average"
+  )
+
+ggplot(engagement_melted, aes(x = as.factor(has_media), y = average, fill = engagement_type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  labs(
+    title = "Impact of Multimedia Content on Tweet Engagement",
+    x = "Has Multimedia Content (1 = Yes, 0 = No)",
+    y = "Average Engagement",
+    fill = "Engagement Type"
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**11\> Influence of Social Media Tone on Public Engagement:**
+
+```{r}
+library(dplyr)
+library(tidytext)
+library(ggplot2)
+
+tweets_sentiment <- tweets_data %>%
+  unnest_tokens(word, cleaned_text) %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  group_by(id, sentiment) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = sentiment, values_from = count, values_fill = 0) %>%
+  mutate(sentiment_score = positive - negative)
+
+print("Preview of Sentiment Scores:")
+print(head(tweets_sentiment$sentiment_score, 10))
+tweets_sentiment <- tweets_sentiment %>%
+  mutate(
+    tone = case_when(
+      sentiment_score > 0 ~ "Positive",
+      sentiment_score < 0 ~ "Negative",
+      TRUE ~ "Neutral"
+    )
+  )
+
+
+print("Final Dataset with Sentiment and Tone:")
+print(head(tweets_sentiment, 10))
+tweets_sentiment <- tweets_sentiment %>%
+  left_join(tweets_data, by = "id")  
+
+engagement_by_tone <- tweets_sentiment %>%
+  group_by(tone) %>%
+  summarize(
+    avg_likes = mean(likes, na.rm = TRUE),  
+    avg_retweets = mean(retweets, na.rm = TRUE),  
+    .groups = "drop"
+  )
+
+print("Engagement Metrics by Tone:")
+print(engagement_by_tone)
+ggplot(engagement_by_tone, aes(x = tone)) +
+  geom_bar(aes(y = avg_likes, fill = "Likes"), stat = "identity", position = "dodge") +
+  geom_bar(aes(y = avg_retweets, fill = "Retweets"), stat = "identity", position = "dodge") +
+  labs(
+    title = "Influence of Social Media Tone on Public Engagement",
+    x = "Tone",
+    y = "Average Engagement",
+    fill = "Engagement Type"
+  ) +
+  scale_fill_manual(values = c("Likes" = "blue", "Retweets" = "skyblue")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+```
+
+**12\> Engagement by Presence of Hashtags:**
+
+```{r}
+tweets_data <- tweets_data %>%
+  mutate(has_hashtag = ifelse(grepl("#", text, ignore.case = TRUE), "Has Hashtag", "No Hashtag"))
+
+
+engagement_by_hashtag <- tweets_data %>%
+  group_by(has_hashtag) %>%
+  summarize(
+    avg_likes = mean(likes, na.rm = TRUE),
+    avg_retweets = mean(retweets, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+engagement_by_hashtag_long <- engagement_by_hashtag %>%
+  tidyr::pivot_longer(
+    cols = c(avg_likes, avg_retweets),
+    names_to = "engagement_type",
+    values_to = "average"
+  )
+
+ggplot(engagement_by_hashtag_long, aes(x = has_hashtag, y = average, fill = engagement_type)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Engagement by Presence of Hashtags",
+    x = "Hashtags Presence",
+    y = "Average Engagement",
+    fill = "Engagement Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+```
+
+**13\> Average Engagement**
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+
+engagement_by_type <- tweets_data %>%
+  group_by(user_type) %>%  
+  summarize(
+    avg_likes = mean(likes, na.rm = TRUE),
+    avg_retweets = mean(retweets, na.rm = TRUE),
+    .groups = "drop"
+  )
+engagement_by_type_long <- engagement_by_type %>%
+  tidyr::pivot_longer(
+    cols = c(avg_likes, avg_retweets),
+    names_to = "engagement_type",
+    values_to = "average"
+  )
+
+ggplot(engagement_by_type_long, aes(x = reorder(user_type, -average), y = average, fill = engagement_type)) +  
+  geom_col(position = "dodge") +
+  labs(
+    title = "Engagement by User Type",
+    x = "content_type",
+    y = "Average Engagement",
+    fill = "Engagement Type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+```
